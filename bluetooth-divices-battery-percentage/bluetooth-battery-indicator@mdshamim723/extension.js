@@ -1,15 +1,15 @@
 'use strict';
 
-import GObject from 'gi://GObject';
-import St from 'gi://St';
-import Gio from 'gi://Gio';
-import GLib from 'gi://GLib';
+const GObject = imports.gi.GObject;
+const St      = imports.gi.St;
+const Gio     = imports.gi.Gio;
+const GLib    = imports.gi.GLib;
 
-import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
-import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+const Main      = imports.ui.main;
+const PanelMenu = imports.ui.panelMenu;
+const PopupMenu = imports.ui.popupMenu;
 
-import {Extension, gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
+const ExtensionUtils = imports.misc.extensionUtils;
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -23,7 +23,6 @@ const IFACE_PROPERTIES = 'org.freedesktop.DBus.Properties';
 const LOW_BATTERY_THRESHOLD = 20;
 const DEBOUNCE_MS = 300;
 
-// BlueZ Icon property value → emoji
 const ICON_MAP = {
     'audio-headset':    '🎧',
     'audio-headphones': '🎧',
@@ -41,23 +40,24 @@ function deviceEmoji(bluezIcon) {
     return ICON_MAP[bluezIcon] ?? '📡';
 }
 
+// Minimal gettext shim — no translations bundled for this port
+function _(s) { return s; }
+
 // ─── Panel Indicator ─────────────────────────────────────────────────────────
 
 const BluetoothBatteryIndicator = GObject.registerClass(
 class BluetoothBatteryIndicator extends PanelMenu.Button {
 
-    _init(extension) {
+    _init() {
         super._init(0.0, 'Bluetooth Battery Indicator');
 
-        this._ext = extension;
-        this._devices = new Map();   // objectPath → { name, icon, battery, connected }
+        this._devices = new Map();
         this._signalIds = [];
         this._debounceId = null;
         this._objectManagerProxy = null;
         this._showUnknown = true;
         this._settingsChangedId = null;
 
-        // Panel label
         this._label = new St.Label({
             text: '🔋 BT',
             y_align: 2, // Clutter.ActorAlign.CENTER
@@ -65,8 +65,7 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
         });
         this.add_child(this._label);
 
-        // Load settings
-        this._settings = this._ext.getSettings();
+        this._settings = ExtensionUtils.getSettings();
         this._showUnknown = this._settings.get_boolean('show-unknown-battery');
         this._settingsChangedId = this._settings.connect(
             'changed::show-unknown-battery',
@@ -76,11 +75,10 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
             }
         );
 
-        // Connect to BlueZ
         this._connectToBlueZ();
     }
 
-    // ── Step 2: Connect to BlueZ ObjectManager ────────────────────────────
+    // ── Connect to BlueZ ObjectManager ────────────────────────────────────
 
     _connectToBlueZ() {
         Gio.DBusProxy.new(
@@ -95,7 +93,7 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
                 try {
                     this._objectManagerProxy = Gio.DBusProxy.new_finish(result);
                 } catch (e) {
-                    console.error(`[BT Battery] Failed to create ObjectManager proxy: ${e.message}`);
+                    log(`[BT Battery] Failed to create ObjectManager proxy: ${e.message}`);
                     this._setOffline();
                     return;
                 }
@@ -113,7 +111,7 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
         this.menu.addMenuItem(item);
     }
 
-    // ── Step 3 & 4: Load all devices + battery from GetManagedObjects ─────
+    // ── Load all devices from GetManagedObjects ────────────────────────────
 
     _loadAllDevices() {
         this._objectManagerProxy.call(
@@ -127,12 +125,11 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
                 try {
                     variant = proxy.call_finish(result);
                 } catch (e) {
-                    console.error(`[BT Battery] GetManagedObjects failed: ${e.message}`);
+                    log(`[BT Battery] GetManagedObjects failed: ${e.message}`);
                     this._setOffline();
                     return;
                 }
 
-                // variant is a (a{oa{sa{sv}}},) tuple — unpack the outer tuple first
                 const [objects] = variant.deepUnpack();
 
                 this._devices.clear();
@@ -144,8 +141,6 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
             }
         );
     }
-
-    // ── Parse a single object path from the managed objects result ────────
 
     _parseObject(path, interfaces) {
         const device1 = interfaces[IFACE_DEVICE1];
@@ -167,7 +162,7 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
         this._devices.set(path, {name, icon: bluezIcon, battery, connected: true});
     }
 
-    // ── Step 5: Build the dropdown menu ──────────────────────────────────
+    // ── Build the dropdown menu ────────────────────────────────────────────
 
     _rebuildMenu() {
         this.menu.removeAll();
@@ -182,7 +177,6 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
             return;
         }
 
-        // Sort: devices with battery first (ascending %), then no-battery devices
         const withBattery    = connected
             .filter(d => d.battery !== null)
             .sort((a, b) => a.battery - b.battery);
@@ -199,7 +193,6 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
                 this.menu.addMenuItem(this._makeDeviceItem(device));
         }
 
-        // Panel label: lowest battery device, or generic fallback
         if (withBattery.length > 0) {
             const lowest = withBattery[0];
             this._label.text = `${deviceEmoji(lowest.icon)} ${lowest.battery}%`;
@@ -207,7 +200,6 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
             this._label.text = '🔋 BT';
         }
 
-        // Tooltip: list all device names
         const names = connected.map(d =>
             `${deviceEmoji(d.icon)} ${d.name}${d.battery !== null ? ` ${d.battery}%` : ''}`
         ).join('\n');
@@ -215,11 +207,10 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
     }
 
     _makeDeviceItem(device) {
-        const isLow    = device.battery !== null && device.battery < LOW_BATTERY_THRESHOLD;
-        const batStr   = device.battery !== null ? `${device.battery}%` : '—';
-        const emoji    = deviceEmoji(device.icon);
+        const isLow  = device.battery !== null && device.battery < LOW_BATTERY_THRESHOLD;
+        const batStr = device.battery !== null ? `${device.battery}%` : '—';
+        const emoji  = deviceEmoji(device.icon);
 
-        // Pad name to fixed width for column alignment
         const name = device.name.length > 22
             ? `${device.name.slice(0, 20)}…`
             : device.name;
@@ -234,10 +225,9 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
         return item;
     }
 
-    // ── Step 6: Subscribe to D-Bus signals ───────────────────────────────
+    // ── Subscribe to D-Bus signals ─────────────────────────────────────────
 
     _subscribeSignals() {
-        // InterfacesAdded — new device or Battery1 interface appeared
         this._signalIds.push(
             Gio.DBus.system.signal_subscribe(
                 BLUEZ_BUS_NAME,
@@ -253,7 +243,6 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
             )
         );
 
-        // InterfacesRemoved — device removed or Battery1 disappeared
         this._signalIds.push(
             Gio.DBus.system.signal_subscribe(
                 BLUEZ_BUS_NAME,
@@ -269,13 +258,12 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
             )
         );
 
-        // PropertiesChanged — Connected or Percentage changed on any BlueZ object
         this._signalIds.push(
             Gio.DBus.system.signal_subscribe(
                 BLUEZ_BUS_NAME,
                 IFACE_PROPERTIES,
                 'PropertiesChanged',
-                null,   // any object path under bluez
+                null,
                 null,
                 Gio.DBusSignalFlags.NONE,
                 (conn, sender, objectPath, iface, signal, params) => {
@@ -287,11 +275,10 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
     }
 
     _onInterfacesAdded(objectPath, interfaces) {
-        const device1 = interfaces[IFACE_DEVICE1];
+        const device1  = interfaces[IFACE_DEVICE1];
         const battery1 = interfaces[IFACE_BATTERY1];
 
         if (device1) {
-            // Brand new device appeared; only track if connected
             const connected = device1['Connected']?.deepUnpack() ?? false;
             if (connected) {
                 const existing = this._devices.get(objectPath) ?? {};
@@ -301,17 +288,16 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
                     ? (battery1['Percentage']?.deepUnpack() ?? null)
                     : (existing.battery ?? null);
                 this._devices.set(objectPath, {name, icon, battery, connected: true});
-                this._schedulRebuild();
+                this._scheduleRebuild();
             }
             return;
         }
 
         if (battery1) {
-            // Battery1 interface added to an already-tracked device
             const device = this._devices.get(objectPath);
             if (device) {
                 device.battery = battery1['Percentage']?.deepUnpack() ?? null;
-                this._schedulRebuild();
+                this._scheduleRebuild();
             }
         }
     }
@@ -319,7 +305,7 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
     _onInterfacesRemoved(objectPath, removedIfaces) {
         if (removedIfaces.includes(IFACE_DEVICE1)) {
             this._devices.delete(objectPath);
-            this._schedulRebuild();
+            this._scheduleRebuild();
             return;
         }
 
@@ -327,7 +313,7 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
             const device = this._devices.get(objectPath);
             if (device) {
                 device.battery = null;
-                this._schedulRebuild();
+                this._scheduleRebuild();
             }
         }
     }
@@ -341,13 +327,10 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
             const connected = connectedVariant.deepUnpack();
 
             if (connected) {
-                // Device just connected — fetch its full info via GetManagedObjects
-                // We re-load all to get Name/Icon/Battery atomically
                 this._loadAllDevices();
             } else {
-                // Device disconnected
                 this._devices.delete(objectPath);
-                this._schedulRebuild();
+                this._scheduleRebuild();
             }
             return;
         }
@@ -360,13 +343,12 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
             const device = this._devices.get(objectPath);
             if (device) {
                 device.battery = pctVariant.deepUnpack();
-                this._schedulRebuild();
+                this._scheduleRebuild();
             }
         }
     }
 
-    // Debounce rapid consecutive signal bursts into a single menu rebuild
-    _schedulRebuild() {
+    _scheduleRebuild() {
         if (this._debounceId !== null)
             return;
         this._debounceId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, DEBOUNCE_MS, () => {
@@ -379,18 +361,15 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
     // ── Cleanup ───────────────────────────────────────────────────────────
 
     destroy() {
-        // Cancel pending debounce timer
         if (this._debounceId !== null) {
             GLib.source_remove(this._debounceId);
             this._debounceId = null;
         }
 
-        // Unsubscribe all D-Bus signals
         for (const id of this._signalIds)
             Gio.DBus.system.signal_unsubscribe(id);
         this._signalIds = [];
 
-        // Disconnect settings listener
         if (this._settingsChangedId !== null && this._settings) {
             this._settings.disconnect(this._settingsChangedId);
             this._settingsChangedId = null;
@@ -405,17 +384,20 @@ class BluetoothBatteryIndicator extends PanelMenu.Button {
 
 // ─── Extension Entry Point ────────────────────────────────────────────────────
 
-export default class BluetoothBatteryExtension extends Extension {
+let _indicator = null;
 
-    enable() {
-        this._indicator = new BluetoothBatteryIndicator(this);
-        Main.panel.addToStatusArea(this.uuid, this._indicator);
-        console.log('[BT Battery] Extension enabled');
-    }
+function init() {}
 
-    disable() {
-        this._indicator?.destroy();
-        this._indicator = null;
-        console.log('[BT Battery] Extension disabled');
+function enable() {
+    _indicator = new BluetoothBatteryIndicator();
+    Main.panel.addToStatusArea('bluetooth-battery-indicator', _indicator);
+    log('[BT Battery] Extension enabled');
+}
+
+function disable() {
+    if (_indicator !== null) {
+        _indicator.destroy();
+        _indicator = null;
     }
+    log('[BT Battery] Extension disabled');
 }
