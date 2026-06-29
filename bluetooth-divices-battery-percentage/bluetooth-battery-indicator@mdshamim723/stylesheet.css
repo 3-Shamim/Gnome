@@ -1,0 +1,39 @@
+/* Panel button */
+.bluetooth-battery-indicator {
+    spacing: 4px;
+}
+
+.bluetooth-battery-indicator .panel-label {
+    font-size: 13px;
+}
+
+/* Dropdown menu rows */
+.bluetooth-battery-item {
+    font-family: monospace;
+    font-size: 13px;
+    padding: 6px 12px;
+}
+
+/* Device name column */
+.bluetooth-battery-item .device-name {
+    min-width: 180px;
+}
+
+/* Battery percentage */
+.bluetooth-battery-item .battery-value {
+    color: #aaa;
+    text-align: right;
+}
+
+/* Low battery warning — red tint */
+.bluetooth-battery-low .battery-value {
+    color: #e74c3c;
+    font-weight: bold;
+}
+
+/* Section header */
+.bluetooth-battery-header {
+    font-size: 11px;
+    color: #888;
+    padding: 4px 12px 2px;
+}

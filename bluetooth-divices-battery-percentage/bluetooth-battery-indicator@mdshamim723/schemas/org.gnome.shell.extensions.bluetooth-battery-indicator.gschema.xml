@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.bluetooth-battery-indicator"
+          path="/org/gnome/shell/extensions/bluetooth-battery-indicator/">
+    <key name="show-unknown-battery" type="b">
+      <default>true</default>
+      <summary>Show devices without battery info</summary>
+      <description>
+        When enabled, connected Bluetooth devices that do not expose battery
+        information are shown in the menu with a dash (—). When disabled,
+        those devices are hidden from the menu.
+      </description>
+    </key>
+  </schema>
+</schemalist>

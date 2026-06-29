@@ -1,0 +1,9 @@
+{
+  "name": "Bluetooth Battery Indicator",
+  "description": "Shows battery percentage of connected Bluetooth devices in the GNOME Top Bar",
+  "uuid": "bluetooth-battery-indicator@mdshamim723",
+  "version": 1,
+  "shell-version": ["46", "47", "48"],
+  "url": "https://github.com/mdshamim723/bluetooth-battery-indicator",
+  "settings-schema": "org.gnome.shell.extensions.bluetooth-battery-indicator"
+}
