@@ -30,9 +30,8 @@ else
 fi
 
 echo ""
-echo "Done. To apply changes reload GNOME Shell:"
-echo "  X11:    press Alt+F2, type 'r', press Enter"
-echo "  Wayland: log out and back in"
+echo "Done. To apply changes, log out and back in."
+echo "  (Alt+F2 'r' does not work on Wayland, the only session in GNOME 49+.)"
 echo ""
 echo "To open preferences:"
 echo "  gnome-extensions prefs $UUID"
